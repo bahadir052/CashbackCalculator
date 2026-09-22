@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cashback Calculator (All Brands)
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @description  Casino ve Spor bahisleri için kayıp bonusu ve finans özeti hesaplayıcı. Brand 41 için kademeli sistem, diğer brandler için yüzdelik sistem.
 // @author       BAHO
 // @match        https://core-secundus.gmntc.com/*
@@ -17,14 +17,15 @@
     // ============================================================
     // BRAND TANIMLARI
     // ============================================================
-    // bonusKeyword: Bonus geçmişi (Bonuses) sekmesindeki "Plan" sütununda, o brand'in
-    // anlık kayıp bonusunu tespit etmek için aranan anahtar kelime (büyük harfe çevrilip aranır).
+    // bonusBaseKeyword: Bonus geçmişi (Bonuses) sekmesindeki "Plan" sütununda, o brand'in
+    // anlık kayıp bonusu ailesini tespit etmek için aranan temel anahtar kelime (büyük harfe
+    // çevrilip aranır). Casino/Spor ayrımı ayrıca "CASINO"/"SPORT" geçip geçmediğine bakılarak yapılır.
     const BRANDS = [
-        { id: 'B41', label: 'Brand 41', mode: 'tiered', bonusKeyword: 'PROGRESSIVE' },
-        { id: 'B32', label: 'Brand 32', mode: 'percentage', bonusKeyword: 'INSTANT CB' },
-        { id: 'B89', label: 'Brand 89', mode: 'percentage', bonusKeyword: 'INSTANT' },
-        { id: 'B04', label: 'Brand 04', mode: 'percentage', bonusKeyword: 'INSTANT' },
-        { id: 'B07', label: 'Brand 07', mode: 'percentage', bonusKeyword: 'INSTANT' },
+        { id: 'B41', label: 'Brand 41', mode: 'tiered', bonusBaseKeyword: 'PROGRESSIVE' },
+        { id: 'B32', label: 'Brand 32', mode: 'percentage', bonusBaseKeyword: 'INSTANT CB' },
+        { id: 'B89', label: 'Brand 89', mode: 'percentage', bonusBaseKeyword: 'INSTANT' },
+        { id: 'B04', label: 'Brand 04', mode: 'percentage', bonusBaseKeyword: 'INSTANT' },
+        { id: 'B07', label: 'Brand 07', mode: 'percentage', bonusBaseKeyword: 'INSTANT' },
     ];
     const STORAGE_KEY = 'cashbackCalc_selectedBrand';
     // @version ile senkron tutulmalı — her güncellemede birlikte artırılacak.
@@ -46,6 +47,9 @@
     }
 
     let currentBrand = getBrandById(loadSavedBrandId());
+    // Kalite kontrol / geçmişe yönelik tarih filtreleme için: açıkken bonus hafızası tamamen devre dışı kalır.
+    // Kasıtlı olarak KALICI DEĞİL — her sayfa yenilemesinde/kurulumda varsayılan olarak kapalı (normal davranış) başlar.
+    let bypassBonusMemory = false;
 
     // ============================================================
     // ARAYÜZ OLUŞTURMA
@@ -88,7 +92,9 @@
                         <li style="margin-bottom:4px;">Kayıp/kazanç (bonus tutarı) hesabını ise otomatik olarak <b>son bonus alım anından sonrasına</b> sınırlıyor.</li>
                     </ul>
                     <p style="margin:0 0 8px 0;">Yani eski sistemdeki gibi elle kısa bir pencereye filtreleme yapmana gerek yok — <b>her zaman 24 saat filtrele, gerisini eklenti hallediyor.</b> Bonuses sayfasına hiç girmezsen, eklenti eskisi gibi görünen tüm pencereyi hesaba katmaya devam eder.</p>
-                    <p style="margin:0; color:#888; font-size:11px;">Panelde alt kısımdaki küçük yazı, hafızaya alınan son bonus bilgisini gösterir.</p>
+                    <p style="margin:0 0 8px 0; color:#888; font-size:11px;">Panelde alt kısımdaki küçük yazı, hafızaya alınan son bonus bilgisini gösterir.</p>
+                    <div style="color:#ffaa00; font-weight:bold; margin-bottom:6px; font-size:12px;">Kalite kontrol / geçmişe yönelik analiz yapıyorsan:</div>
+                    <p style="margin:0;">Eski usul, elle tarih-saat aralığı filtreleyerek geçmişe dönük kontrol yapıyorsan, hafızadaki bonus bilgisi seni yanıltabilir. Bu durumda <b>⚙ Ayarlar</b>'daki <b>"Eski Usul Hesapla (Bonus Hafızasını Kullanma)"</b> anahtarını aç — bonus hafızası tamamen devre dışı kalır ve script, seçtiğin tarih aralığını olduğu gibi (eski davranış) hesaplar.</p>
                 </div>
                 <button id="btnBackInfo" style="width:100%; padding:10px; border-radius:8px; background:#333; color:#fff; font-weight:bold; border:none; cursor:pointer; font-size:13px;">
                     ← Geri
@@ -103,6 +109,13 @@
                         <option value="" disabled ${!currentBrand ? 'selected' : ''}>Seçiniz</option>
                         ${brandOptionsHTML}
                     </select>
+                </div>
+                <div style="margin-bottom:12px; background:#222; padding:8px; border-radius:6px; border:1px solid #444;">
+                    <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#ddd; cursor:pointer; margin:0;">
+                        <input type="checkbox" id="chkBypassBonusMemory" style="width:16px; height:16px; cursor:pointer;">
+                        Eski Usul Hesapla (Bonus Hafızasını Kullanma)
+                    </label>
+                    <div style="font-size:10px; color:#888; margin-top:4px;">Kalite kontrol / geçmişe yönelik tarih-saat filtreleme yaparken aç. Açıkken hafızadaki bonus bilgisi dikkate alınmaz, seçtiğin tarih aralığı olduğu gibi (eski usul) hesaplanır.</div>
                 </div>
                 <button id="btnBackSettings" style="width:100%; padding:10px; border-radius:8px; background:#333; color:#fff; font-weight:bold; border:none; cursor:pointer; font-size:13px;">
                     ← Geri
@@ -159,6 +172,7 @@
     const settingsView = document.getElementById('settingsView');
     const mainView = document.getElementById('mainView');
     const brandSelect = document.getElementById('brandSelect');
+    const chkBypassBonusMemory = document.getElementById('chkBypassBonusMemory');
     const brandBadge = document.getElementById('brandBadge');
     const percentageWrap = document.getElementById('percentageWrap');
     const tieredWrap = document.getElementById('tieredWrap');
@@ -208,6 +222,11 @@
         currentBrand = getBrandById(brandSelect.value);
         saveBrandId(currentBrand.id);
         refreshBrandUI();
+    });
+
+    chkBypassBonusMemory.addEventListener('change', () => {
+        bypassBonusMemory = chkBypassBonusMemory.checked;
+        refreshBonusMemoryIndicator();
     });
 
     btnSettingsCalc.addEventListener('click', () => {
@@ -340,13 +359,22 @@
     function saveBonusMemoryStore(store) {
         try { localStorage.setItem(BONUS_MEMORY_KEY, JSON.stringify(store)); } catch (e) {}
     }
-    // 7 dakikayı geçen kayıtları temizler, geriye güncel store'u döner.
+    // Her oyuncu için { brandId, casino: {triggerTs, triggerDateText, amountText, capturedAt}, sports: {...} } tutulur.
+    // casino ve sports birbirinden bağımsız olarak 7 dakika sonra temizlenir.
     function cleanExpiredBonusMemory() {
         let store = loadBonusMemoryStore();
         let now = Date.now();
         let changed = false;
         Object.keys(store).forEach(pid => {
-            if (!store[pid] || (now - store[pid].capturedAt) > BONUS_MEMORY_TTL_MS) {
+            let entry = store[pid];
+            if (!entry) { delete store[pid]; changed = true; return; }
+            ['casino', 'sports'].forEach(type => {
+                if (entry[type] && (now - entry[type].capturedAt) > BONUS_MEMORY_TTL_MS) {
+                    delete entry[type];
+                    changed = true;
+                }
+            });
+            if (!entry.casino && !entry.sports) {
                 delete store[pid];
                 changed = true;
             }
@@ -359,10 +387,14 @@
         let store = cleanExpiredBonusMemory();
         return store[playerId] || null;
     }
-    function setBonusMemoryForPlayer(playerId, data) {
+    // type: 'casino' | 'sports'
+    function setBonusTypeMemoryForPlayer(playerId, brandId, type, data) {
         if (!playerId) return;
         let store = cleanExpiredBonusMemory();
-        store[playerId] = Object.assign({}, data, { capturedAt: Date.now() });
+        if (!store[playerId] || store[playerId].brandId !== brandId) {
+            store[playerId] = { brandId: brandId };
+        }
+        store[playerId][type] = Object.assign({}, data, { capturedAt: Date.now() });
         saveBonusMemoryStore(store);
     }
 
@@ -403,47 +435,60 @@
 
         if (planIdx === -1 || triggerDateIdx === -1) return;
 
-        let keyword = currentBrand.bonusKeyword;
-        let bestTs = -Infinity;
-        let bestDateText = "";
-        let bestAmountText = "";
+        let baseKeyword = currentBrand.bonusBaseKeyword;
+        let best = { casino: null, sports: null };
 
         tbody.querySelectorAll('tr').forEach(row => {
             let cells = row.cells;
             if (!cells[planIdx] || !cells[triggerDateIdx]) return;
             let planText = cells[planIdx].textContent.trim().toUpperCase();
-            if (!planText.includes(keyword)) return;
+            if (!planText.includes(baseKeyword)) return;
+
             let ts = parseTableDateTime(cells[triggerDateIdx].textContent);
             if (ts === null) return;
-            if (ts > bestTs) {
-                bestTs = ts;
-                bestDateText = cells[triggerDateIdx].textContent.trim();
-                bestAmountText = (amountIdx !== -1 && cells[amountIdx]) ? cells[amountIdx].textContent.trim() : "";
+
+            let dateText = cells[triggerDateIdx].textContent.trim();
+            let amountText = (amountIdx !== -1 && cells[amountIdx]) ? cells[amountIdx].textContent.trim() : "";
+
+            // Casino/Spor ayrımı: Plan metninde "CASINO" veya "SPORT" (Sport/Sports/Sportsbook) geçmesine göre.
+            if (planText.includes('CASINO') && (!best.casino || ts > best.casino.triggerTs)) {
+                best.casino = { triggerTs: ts, triggerDateText: dateText, amountText: amountText };
+            }
+            if (planText.includes('SPORT') && (!best.sports || ts > best.sports.triggerTs)) {
+                best.sports = { triggerTs: ts, triggerDateText: dateText, amountText: amountText };
             }
         });
 
-        if (bestTs > -Infinity) {
-            setBonusMemoryForPlayer(playerId, {
-                triggerTs: bestTs,
-                triggerDateText: bestDateText,
-                amountText: bestAmountText,
-                brandId: currentBrand.id
-            });
-            refreshBonusMemoryIndicator();
-        }
+        let found = false;
+        if (best.casino) { setBonusTypeMemoryForPlayer(playerId, currentBrand.id, 'casino', best.casino); found = true; }
+        if (best.sports) { setBonusTypeMemoryForPlayer(playerId, currentBrand.id, 'sports', best.sports); found = true; }
+        if (found) refreshBonusMemoryIndicator();
     }
 
-    // Panelde, geçerli oyuncu için hafızada tutulan anlık kayıp bonusu bilgisini küçük yazıyla gösterir.
+    // Panelde, geçerli oyuncu için hafızada tutulan anlık kayıp bonusu bilgilerini (casino + spor ayrı ayrı) küçük yazıyla gösterir.
     function refreshBonusMemoryIndicator() {
         if (!bonusMemoryIndicator) return;
+        if (bypassBonusMemory) {
+            bonusMemoryIndicator.textContent = '⚠️ Eski Usul Hesaplama açık — bonus hafızası kullanılmıyor.';
+            return;
+        }
+        if (!currentBrand) { bonusMemoryIndicator.textContent = ''; return; }
         let playerId = getPlayerIdFromUrl();
         let mem = getBonusMemoryForPlayer(playerId);
-        if (!currentBrand || !mem || mem.brandId !== currentBrand.id) {
+        if (!mem || mem.brandId !== currentBrand.id || (!mem.casino && !mem.sports)) {
             bonusMemoryIndicator.textContent = '';
             return;
         }
-        let dakika = Math.floor((Date.now() - mem.capturedAt) / 60000);
-        bonusMemoryIndicator.textContent = `Hafızadaki anlık kayıp bonusu: ${mem.triggerDateText}${mem.amountText ? ' - ' + mem.amountText : ''} (${dakika} dk önce tespit edildi)`;
+        let parts = [];
+        if (mem.casino) {
+            let dk = Math.floor((Date.now() - mem.casino.capturedAt) / 60000);
+            parts.push(`Casino: ${mem.casino.triggerDateText}${mem.casino.amountText ? ' - ' + mem.casino.amountText : ''} (${dk} dk)`);
+        }
+        if (mem.sports) {
+            let dk = Math.floor((Date.now() - mem.sports.capturedAt) / 60000);
+            parts.push(`Spor: ${mem.sports.triggerDateText}${mem.sports.amountText ? ' - ' + mem.sports.amountText : ''} (${dk} dk)`);
+        }
+        bonusMemoryIndicator.textContent = 'Hafızadaki anlık kayıp bonusu — ' + parts.join(' | ');
     }
 
     setInterval(scanBonusHistory, 2000);
@@ -505,18 +550,23 @@
             // oyun/bonus hesabı SADECE bu satırdan sonrasını kapsayacak. Deposit/Withdrawal
             // toplamları buna bakılmaksızın her zaman tüm görünen pencereyi kapsar.
             let cutoffTs = null;
-            let bonusMemory = getBonusMemoryForPlayer(getPlayerIdFromUrl());
-            if (bonusMemory && bonusMemory.brandId === currentBrand.id) {
-                let matchFound = false;
-                rows.forEach(row => {
-                    let cells = row.cells;
-                    if (cells.length < 15) return;
-                    let type = cells[typeIdx].textContent.trim().toUpperCase();
-                    if (type !== 'CRE_BONUS') return;
-                    let ts = cells[dateTimeIdx] ? parseTableDateTime(cells[dateTimeIdx].textContent) : null;
-                    if (ts !== null && ts === bonusMemory.triggerTs) matchFound = true;
-                });
-                if (matchFound) cutoffTs = bonusMemory.triggerTs;
+            // "Eski Usul Hesapla" açıksa (kalite kontrol / geçmişe yönelik analiz), bonus hafızası tamamen atlanır.
+            if (!bypassBonusMemory) {
+                let bonusMemory = getBonusMemoryForPlayer(getPlayerIdFromUrl());
+                // mode: 'casino' veya 'sports' — Casino Hesapla ile Spor Hesapla birbirinden bağımsız kendi bonus kaydını kullanır.
+                let bonusEntry = (bonusMemory && bonusMemory.brandId === currentBrand.id) ? bonusMemory[mode] : null;
+                if (bonusEntry) {
+                    let matchFound = false;
+                    rows.forEach(row => {
+                        let cells = row.cells;
+                        if (cells.length < 15) return;
+                        let type = cells[typeIdx].textContent.trim().toUpperCase();
+                        if (type !== 'CRE_BONUS') return;
+                        let ts = cells[dateTimeIdx] ? parseTableDateTime(cells[dateTimeIdx].textContent) : null;
+                        if (ts !== null && ts === bonusEntry.triggerTs) matchFound = true;
+                    });
+                    if (matchFound) cutoffTs = bonusEntry.triggerTs;
+                }
             }
 
             // --- 1. AŞAMA (ÖN TARAMA) ---
@@ -655,7 +705,9 @@
                 `;
             }
             else if (mode === 'sports') {
-                let sporNet = sBahis - (sKazanc + totalBonusRel + sCashOutFarki);
+                // NOT: Core paneldeki gerçek anlık CB sonuçlarıyla sağlama yapıldı — Cash Out Farkı
+                // ters yönde etki ediyor: negatifken net kayıptan düşüyor, pozitifken net kayba ekleniyor.
+                let sporNet = sBahis - sKazanc - totalBonusRel + sCashOutFarki;
                 let bonusTutari = calculateTieredBonus(sporNet);
 
                 resultDiv.innerHTML = missingWarningHTML + `
@@ -748,18 +800,23 @@
 
             // --- ANLIK KAYIP BONUSU KESİM NOKTASI (varsa) ---
             let cutoffTs = null;
-            let bonusMemory = getBonusMemoryForPlayer(getPlayerIdFromUrl());
-            if (bonusMemory && bonusMemory.brandId === currentBrand.id) {
-                let matchFound = false;
-                rows.forEach(row => {
-                    let cells = row.cells;
-                    if (cells.length < 15) return;
-                    let type = cells[typeIdx].textContent.trim().toUpperCase();
-                    if (type !== 'CRE_BONUS') return;
-                    let ts = cells[dateTimeIdx] ? parseTableDateTime(cells[dateTimeIdx].textContent) : null;
-                    if (ts !== null && ts === bonusMemory.triggerTs) matchFound = true;
-                });
-                if (matchFound) cutoffTs = bonusMemory.triggerTs;
+            // "Eski Usul Hesapla" açıksa (kalite kontrol / geçmişe yönelik analiz), bonus hafızası tamamen atlanır.
+            if (!bypassBonusMemory) {
+                let bonusMemory = getBonusMemoryForPlayer(getPlayerIdFromUrl());
+                // mode: 'casino' veya 'sports' — Casino Hesapla ile Spor Hesapla birbirinden bağımsız kendi bonus kaydını kullanır.
+                let bonusEntry = (bonusMemory && bonusMemory.brandId === currentBrand.id) ? bonusMemory[mode] : null;
+                if (bonusEntry) {
+                    let matchFound = false;
+                    rows.forEach(row => {
+                        let cells = row.cells;
+                        if (cells.length < 15) return;
+                        let type = cells[typeIdx].textContent.trim().toUpperCase();
+                        if (type !== 'CRE_BONUS') return;
+                        let ts = cells[dateTimeIdx] ? parseTableDateTime(cells[dateTimeIdx].textContent) : null;
+                        if (ts !== null && ts === bonusEntry.triggerTs) matchFound = true;
+                    });
+                    if (matchFound) cutoffTs = bonusEntry.triggerTs;
+                }
             }
 
             // --- 1. AŞAMA (ÖN TARAMA) ---
@@ -900,7 +957,9 @@
                 `;
             }
             else if (mode === 'sports') {
-                let sporNet = sBahis - (sKazanc + totalBonusRel + sCashOutFarki);
+                // NOT: Core paneldeki gerçek anlık CB sonuçlarıyla sağlama yapıldı — Cash Out Farkı
+                // ters yönde etki ediyor: negatifken net kayıptan düşüyor, pozitifken net kayba ekleniyor.
+                let sporNet = sBahis - sKazanc - totalBonusRel + sCashOutFarki;
                 let bonusTutari = sporNet > 0 ? (sporNet * (percentValue / 100)) : 0;
 
                 resultDiv.innerHTML = missingWarningHTML + `
