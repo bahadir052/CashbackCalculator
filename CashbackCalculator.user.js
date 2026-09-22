@@ -3,9 +3,11 @@
 // @namespace    http://tampermonkey.net/
 // @version      2.0
 // @description  Casino ve Spor bahisleri için kayıp bonusu ve finans özeti hesaplayıcı. Brand 41 için kademeli sistem, diğer brandler için yüzdelik sistem.
-// @author       Gemini
+// @author       BAHO
 // @match        https://core-secundus.gmntc.com/*
 // @match        https://sgp.gmntc.com/*
+// @updateURL    https://raw.githubusercontent.com/bahadir052/CashbackCalculator/main/CashbackCalculator.user.js
+// @downloadURL  https://raw.githubusercontent.com/bahadir052/CashbackCalculator/main/CashbackCalculator.user.js
 // @grant        none
 // ==/UserScript==
 
@@ -183,6 +185,11 @@
         return isNaN(num) ? 0.0 : Math.abs(num);
     }
 
+    // Provider (Product) sütununda "Even Bet Gaming" (poker sağlayıcısı) geçen satırlar hesaplamaya dahil edilmez.
+    function isExcludedProvider(product) {
+        return product.includes('EVEN BET GAMING');
+    }
+
     // Brand 41: Kademeli Merdiven Bonusu Hesaplama Fonksiyonu
     function calculateTieredBonus(netLoss) {
         if (netLoss <= 0) return 0;
@@ -276,8 +283,11 @@
                 if (cells.length < 15) return;
 
                 let type = cells[typeIdx].textContent.trim().toUpperCase();
+                let product = cells[productIdx].textContent.trim().toUpperCase();
                 let tranId = cells[tranIdIdx].textContent.trim();
                 let debit = cleanMoney(cells[debitIdx].textContent);
+
+                if (isExcludedProvider(product)) return;
 
                 if (type === 'GAME_BET' && tranId && tranId !== "") {
                     sporBahisHafizasi[tranId] = debit;
@@ -303,6 +313,7 @@
                 let amount = debit + credit;
 
                 if (!type || type === "") return;
+                if (isExcludedProvider(product)) return;
 
                 islenenSatirCount++;
                 let isSports = product.includes('BETBY') || product.includes('DIGITAIN');
@@ -485,8 +496,11 @@
                 if (cells.length < 15) return;
 
                 let type = cells[typeIdx].textContent.trim().toUpperCase();
+                let product = cells[productIdx].textContent.trim().toUpperCase();
                 let tranId = cells[tranIdIdx].textContent.trim();
                 let debit = cleanMoney(cells[debitIdx].textContent);
+
+                if (isExcludedProvider(product)) return;
 
                 if (type === 'GAME_BET' && tranId && tranId !== "") {
                     sporBahisHafizasi[tranId] = debit;
@@ -515,6 +529,7 @@
                 let amount = debit + credit + relBonusCredit + relBonusDebit;
 
                 if (!type || type === "") return;
+                if (isExcludedProvider(product)) return;
 
                 islenenSatirCount++;
                 let isSports = product.includes('BETBY') || product.includes('DIGITAIN');
