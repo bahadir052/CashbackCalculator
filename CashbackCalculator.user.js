@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cashback Calculator (All Brands)
 // @namespace    http://tampermonkey.net/
-// @version      2.2
+// @version      2.3
 // @description  Casino ve Spor bahisleri için kayıp bonusu ve finans özeti hesaplayıcı. Brand 41 için kademeli sistem, diğer brandler için yüzdelik sistem.
 // @author       BAHO
 // @match        https://core-secundus.gmntc.com/*
@@ -532,6 +532,7 @@
 
             let cBahis = 0, cKazanc = 0;
             let sBahis = 0, sKazanc = 0, sCashOutFarki = 0;
+            let sCashedOutBetTotal = 0, sCashOutCreditTotal = 0;
             let totalBonusRel = 0;
             let sporBahisHafizasi = {};
             let cashoutYapilanTranIdler = new Set();
@@ -636,8 +637,10 @@
                     }
                     else if (type === 'GAME_WIN') { sKazanc += credit; }
                     else if (type === 'CASH_OUT') {
+                        sCashOutCreditTotal += credit;
                         if (tranId && sporBahisHafizasi.hasOwnProperty(tranId)) {
                             let gameBetTutari = sporBahisHafizasi[tranId];
+                            sCashedOutBetTotal += gameBetTutari;
                             sCashOutFarki += (credit - gameBetTutari);
                         } else {
                             let gosterilecekId = (tranId && tranId.replace(/\s/g, '') !== "") ? tranId : ("Satır No: " + anaIslemNo);
@@ -673,6 +676,23 @@
                 `;
             }
 
+            // Cashout edilen bahisler hesaplamaya dahil edilmiyor (core sağlaması sonucu) — sadece bilgi amaçlı gösteriliyor.
+            let cashOutDetailHTML = "";
+            if (sCashedOutBetTotal > 0 || sCashOutCreditTotal > 0) {
+                cashOutDetailHTML = `
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <span>Cashout Edilen Bahis:</span> <span style="color:#aaa;">${sCashedOutBetTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <span>Cashout ile Alınan:</span> <span style="color:#aaa;">${sCashOutCreditTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <span>Cash Out Farkı:</span> <span style="color:#aaa;">${sCashOutFarki.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+                    </div>
+                    <div style="font-size:10px; color:#888; margin-bottom:3px;">ℹ️ Cashout edilen bahisler NET KAYIP hesaplamasına dahil edilmiyor, yukarıdaki tutarlar sadece bilgi amaçlıdır.</div>
+                `;
+            }
+
             if (mode === 'casino') {
                 let casinoNet = cBahis - cKazanc - totalBonusRel;
                 let bonusTutari = calculateTieredBonus(casinoNet);
@@ -705,9 +725,9 @@
                 `;
             }
             else if (mode === 'sports') {
-                // NOT: Core paneldeki gerçek anlık CB sonuçlarıyla sağlama yapıldı — Cash Out Farkı
-                // ters yönde etki ediyor: negatifken net kayıptan düşüyor, pozitifken net kayba ekleniyor.
-                let sporNet = sBahis - sKazanc - totalBonusRel + sCashOutFarki;
+                // NOT: Core paneldeki gerçek anlık CB sonuçlarıyla sağlama yapıldı — cashout edilen
+                // bahisler (hem stake'i hem cashout ile alınan tutar) hesaplamaya HİÇ dahil edilmiyor.
+                let sporNet = sBahis - sKazanc - totalBonusRel;
                 let bonusTutari = calculateTieredBonus(sporNet);
 
                 resultDiv.innerHTML = missingWarningHTML + `
@@ -722,9 +742,7 @@
                         <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
                             <span title="Tüm Bonuslar">Toplam Bonus_Rel:</span> <span style="color:#ff5555;">- ${totalBonusRel.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
                         </div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                            <span>Cash Out Farkı:</span> <span style="color:#aaa;">${sCashOutFarki.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
-                        </div>
+                        ${cashOutDetailHTML}
                         <div style="display:flex; justify-content:space-between; margin-top:5px; border-top:1px solid #444; padding-top:5px; font-weight:bold;">
                             <span style="color:#ffaa00;">SPOR NET:</span> <span style="color:#ffaa00;">${sporNet.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
                         </div>
@@ -786,6 +804,7 @@
 
             let cBahis = 0, cKazanc = 0;
             let sBahis = 0, sKazanc = 0, sCashOutFarki = 0;
+            let sCashedOutBetTotal = 0, sCashOutCreditTotal = 0;
             let totalBonusRel = 0;
             let sporBahisHafizasi = {};
             let cashoutYapilanTranIdler = new Set();
@@ -889,8 +908,10 @@
                     }
                     else if (type === 'GAME_WIN') { sKazanc += credit; }
                     else if (type === 'CASH_OUT') {
+                        sCashOutCreditTotal += credit;
                         if (tranId && sporBahisHafizasi.hasOwnProperty(tranId)) {
                             let gameBetTutari = sporBahisHafizasi[tranId];
+                            sCashedOutBetTotal += gameBetTutari;
                             sCashOutFarki += (credit - gameBetTutari);
                         } else {
                             let gosterilecekId = (tranId && tranId.replace(/\s/g, '') !== "") ? tranId : ("Satır No: " + anaIslemNo);
@@ -926,6 +947,23 @@
                 `;
             }
 
+            // Cashout edilen bahisler hesaplamaya dahil edilmiyor (core sağlaması sonucu) — sadece bilgi amaçlı gösteriliyor.
+            let cashOutDetailHTML = "";
+            if (sCashedOutBetTotal > 0 || sCashOutCreditTotal > 0) {
+                cashOutDetailHTML = `
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <span>Cashout Edilen Bahis:</span> <span style="color:#aaa;">${sCashedOutBetTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <span>Cashout ile Alınan:</span> <span style="color:#aaa;">${sCashOutCreditTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <span>Cash Out Farkı:</span> <span style="color:#aaa;">${sCashOutFarki.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
+                    </div>
+                    <div style="font-size:10px; color:#888; margin-bottom:3px;">ℹ️ Cashout edilen bahisler NET KAYIP hesaplamasına dahil edilmiyor, yukarıdaki tutarlar sadece bilgi amaçlıdır.</div>
+                `;
+            }
+
             if (mode === 'casino') {
                 let casinoNet = cBahis - cKazanc - totalBonusRel;
                 let bonusTutari = casinoNet > 0 ? (casinoNet * (percentValue / 100)) : 0;
@@ -957,9 +995,9 @@
                 `;
             }
             else if (mode === 'sports') {
-                // NOT: Core paneldeki gerçek anlık CB sonuçlarıyla sağlama yapıldı — Cash Out Farkı
-                // ters yönde etki ediyor: negatifken net kayıptan düşüyor, pozitifken net kayba ekleniyor.
-                let sporNet = sBahis - sKazanc - totalBonusRel + sCashOutFarki;
+                // NOT: Core paneldeki gerçek anlık CB sonuçlarıyla sağlama yapıldı — cashout edilen
+                // bahisler (hem stake'i hem cashout ile alınan tutar) hesaplamaya HİÇ dahil edilmiyor.
+                let sporNet = sBahis - sKazanc - totalBonusRel;
                 let bonusTutari = sporNet > 0 ? (sporNet * (percentValue / 100)) : 0;
 
                 resultDiv.innerHTML = missingWarningHTML + `
@@ -974,9 +1012,7 @@
                         <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
                             <span title="Tüm Bonuslar">Toplam Bonus_Rel:</span> <span style="color:#ff5555;">- ${totalBonusRel.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
                         </div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                            <span>Cash Out Farkı:</span> <span style="color:#aaa;">${sCashOutFarki.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
-                        </div>
+                        ${cashOutDetailHTML}
                         <div style="display:flex; justify-content:space-between; margin-top:5px; border-top:1px solid #444; padding-top:5px; font-weight:bold;">
                             <span style="color:#ffaa00;">SPOR NET:</span> <span style="color:#ffaa00;">${sporNet.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺</span>
                         </div>
