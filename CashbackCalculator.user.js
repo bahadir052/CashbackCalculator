@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cashback Calculator (All Brands)
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.1
 // @description  Casino ve Spor bahisleri için kayıp bonusu ve finans özeti hesaplayıcı. Brand 41 için kademeli sistem, diğer brandler için yüzdelik sistem.
 // @author       BAHO
 // @match        https://core-secundus.gmntc.com/*
@@ -17,24 +17,29 @@
     // ============================================================
     // BRAND TANIMLARI
     // ============================================================
+    // bonusKeyword: Bonus geçmişi (Bonuses) sekmesindeki "Plan" sütununda, o brand'in
+    // anlık kayıp bonusunu tespit etmek için aranan anahtar kelime (büyük harfe çevrilip aranır).
     const BRANDS = [
-        { id: 'B41', label: 'Brand 41', mode: 'tiered' },
-        { id: 'B32', label: 'Brand 32', mode: 'percentage' },
-        { id: 'B89', label: 'Brand 89', mode: 'percentage' },
-        { id: 'B04', label: 'Brand 04', mode: 'percentage' },
-        { id: 'B07', label: 'Brand 07', mode: 'percentage' },
+        { id: 'B41', label: 'Brand 41', mode: 'tiered', bonusKeyword: 'PROGRESSIVE' },
+        { id: 'B32', label: 'Brand 32', mode: 'percentage', bonusKeyword: 'INSTANT CB' },
+        { id: 'B89', label: 'Brand 89', mode: 'percentage', bonusKeyword: 'INSTANT' },
+        { id: 'B04', label: 'Brand 04', mode: 'percentage', bonusKeyword: 'INSTANT' },
+        { id: 'B07', label: 'Brand 07', mode: 'percentage', bonusKeyword: 'INSTANT' },
     ];
     const STORAGE_KEY = 'cashbackCalc_selectedBrand';
+    // @version ile senkron tutulmalı — her güncellemede birlikte artırılacak.
+    const SCRIPT_VERSION = '2.1';
+    const INFO_SEEN_VERSION_KEY = 'cashbackCalc_infoSeenVersion';
 
     function getBrandById(id) {
-        return BRANDS.find(b => b.id === id) || BRANDS[0];
+        return BRANDS.find(b => b.id === id) || null;
     }
     function loadSavedBrandId() {
         try {
             let saved = localStorage.getItem(STORAGE_KEY);
             if (saved && BRANDS.some(b => b.id === saved)) return saved;
         } catch (e) {}
-        return BRANDS[0].id;
+        return null;
     }
     function saveBrandId(id) {
         try { localStorage.setItem(STORAGE_KEY, id); } catch (e) {}
@@ -54,11 +59,40 @@
 
         <div id="bonusCalcPanel" style="position:fixed; bottom:80px; right:20px; width:340px; background:#1a1a24; color:#fff; font-family:Segoe UI, sans-serif; border-radius:12px; padding:15px; box-shadow:0 15px 35px rgba(0,0,0,0.9); z-index:999999; border: 1px solid #333; display:none;">
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #444; padding-bottom:10px; margin-bottom:12px;">
-                <h3 style="margin:0; font-size:15px; color:#00ff88;">🎰 Cashback Calc <span id="brandBadge" style="color:#ffaa00; font-size:13px; margin-left:4px;"></span> <span style="font-size:10px; color:#aaa; margin-left:4px;">v2.0</span></h3>
+                <h3 style="margin:0; font-size:15px; color:#00ff88;">🎰 Cashback Calc <span id="brandBadge" style="color:#ffaa00; font-size:13px; margin-left:4px;"></span> <span style="font-size:10px; color:#aaa; margin-left:4px;">v2.1</span></h3>
                 <div>
+                    <button id="btnInfoCalc" style="background:none; border:none; color:#aaa; font-size:16px; cursor:pointer; padding:0; line-height:1; margin-right:8px;" title="Nasıl Kullanılır?">ℹ</button>
                     <button id="btnSettingsCalc" style="background:none; border:none; color:#aaa; font-size:16px; cursor:pointer; padding:0; line-height:1; margin-right:8px;" title="Ayarlar">⚙</button>
                     <button id="btnCloseCalc" style="background:none; border:none; color:#aaa; font-size:16px; cursor:pointer; padding:0; line-height:1;" title="Kapat">✖</button>
                 </div>
+            </div>
+
+            <!-- INFO VIEW -->
+            <div id="infoView" style="display:none;">
+                <div style="font-size:12px; color:#ddd; line-height:1.6; max-height:360px; overflow-y:auto; margin-bottom:12px;">
+                    <div style="color:#00ff88; font-weight:bold; margin-bottom:8px; font-size:13px;">Nasıl Kullanılır?</div>
+                    <ol style="margin:0 0 12px 0; padding-left:18px;">
+                        <li style="margin-bottom:6px;">Sağ üstteki <b>⚙ Ayarlar</b> ikonundan çalıştığın <b>Brand'i seç</b>. Bu seçim kaydedilir — aynı brand'de çalıştığın sürece bunu sadece <b>bir kere</b> yapman yeterli, tekrar seçmene gerek yok.</li>
+                        <li style="margin-bottom:6px;">Oyuncunun <b>Bonuses</b> (bonus geçmişi) sayfasına gir.</li>
+                        <li style="margin-bottom:6px;">Sonra <b>Transaction</b> sekmesine geç ve <b>her zaman son 24 saati</b> filtrele — daha önce bonus alınmış olsa bile artık kısa bir pencereye filtrelemene gerek yok, her durumda 24 saat filtrele.</li>
+                    </ol>
+                    <div style="background:#5a1010; border:1px solid #ff5555; padding:8px; border-radius:6px; margin-bottom:12px;">
+                        <div style="color:#ff5555; font-weight:bold; margin-bottom:4px;">⚠️ Önemli:</div>
+                        <div style="color:#ddd;">Transaction ekranında <b>"Show Details" toggle'ının AÇIK</b> olduğundan emin ol. Kapalıysa Real Debit, Playable Bonus gibi sütunlar ayrı gösterilmez ve hesaplama <b>0</b> çıkar.</div>
+                    </div>
+                    <div style="color:#ffaa00; font-weight:bold; margin-bottom:6px; font-size:12px;">Neden böyle?</div>
+                    <p style="margin:0 0 8px 0;">Bonuses sayfasını ziyaret ettiğinde eklenti, o üyenin en son anlık kayıp bonusunun tam olarak ne zaman alındığını otomatik olarak hafızasına alıyor.</p>
+                    <p style="margin:0 0 8px 0;">Transaction'a geçip 24 saati filtrelediğinde eklenti:</p>
+                    <ul style="margin:0 0 8px 0; padding-left:18px;">
+                        <li style="margin-bottom:4px;">Yatırım/çekim uygunluk kontrolünü <b>her zaman görünen tüm 24 saatlik pencereden</b> hesaplıyor,</li>
+                        <li style="margin-bottom:4px;">Kayıp/kazanç (bonus tutarı) hesabını ise otomatik olarak <b>son bonus alım anından sonrasına</b> sınırlıyor.</li>
+                    </ul>
+                    <p style="margin:0 0 8px 0;">Yani eski sistemdeki gibi elle kısa bir pencereye filtreleme yapmana gerek yok — <b>her zaman 24 saat filtrele, gerisini eklenti hallediyor.</b> Bonuses sayfasına hiç girmezsen, eklenti eskisi gibi görünen tüm pencereyi hesaba katmaya devam eder.</p>
+                    <p style="margin:0; color:#888; font-size:11px;">Panelde alt kısımdaki küçük yazı, hafızaya alınan son bonus bilgisini gösterir.</p>
+                </div>
+                <button id="btnBackInfo" style="width:100%; padding:10px; border-radius:8px; background:#333; color:#fff; font-weight:bold; border:none; cursor:pointer; font-size:13px;">
+                    ← Geri
+                </button>
             </div>
 
             <!-- SETTINGS VIEW -->
@@ -66,6 +100,7 @@
                 <div style="margin-bottom:12px;">
                     <label style="font-size:12px; color:#aaa; display:block; margin-bottom:4px;">Brand Seçimi:</label>
                     <select id="brandSelect" style="width:100%; padding:10px; border-radius:6px; background:#222; border:1px solid #555; color:#fff; font-size:14px; outline:none; box-sizing:border-box;">
+                        <option value="" disabled ${!currentBrand ? 'selected' : ''}>Seçiniz</option>
                         ${brandOptionsHTML}
                     </select>
                 </div>
@@ -106,6 +141,7 @@
                 </div>
 
                 <div id="bonusCalcResult" style="font-size:13px; max-height:400px; overflow-y:auto; display:none;"></div>
+                <div id="bonusMemoryIndicator" style="font-size:10px; color:#888; margin-top:6px; text-align:center;"></div>
                 <div id="debugNote" style="font-size:10px; color:#aaa; margin-top:5px; text-align:center;">Sonuç hatalıysa ekranı tam aşağı kaydırıp tekrar basın.</div>
             </div>
         </div>
@@ -115,6 +151,9 @@
     const btnToggleCalc = document.getElementById('btnToggleCalc');
     const bonusCalcPanel = document.getElementById('bonusCalcPanel');
     const btnCloseCalc = document.getElementById('btnCloseCalc');
+    const btnInfoCalc = document.getElementById('btnInfoCalc');
+    const btnBackInfo = document.getElementById('btnBackInfo');
+    const infoView = document.getElementById('infoView');
     const btnSettingsCalc = document.getElementById('btnSettingsCalc');
     const btnBackSettings = document.getElementById('btnBackSettings');
     const settingsView = document.getElementById('settingsView');
@@ -127,6 +166,7 @@
     const btnCalcCasino = document.getElementById('btnCalcCasino');
     const btnCalcSports = document.getElementById('btnCalcSports');
     const resultDiv = document.getElementById('bonusCalcResult');
+    const bonusMemoryIndicator = document.getElementById('bonusMemoryIndicator');
     const bonusPercentageInput = document.getElementById('bonusPercentage');
     const financeSummary = document.getElementById('financeSummary');
     const txtTotalDeposit = document.getElementById('txtTotalDeposit');
@@ -136,6 +176,17 @@
     // AYARLAR / BRAND SEÇİMİ UI MANTIĞI
     // ============================================================
     function refreshBrandUI() {
+        if (!currentBrand) {
+            brandBadge.textContent = '| Brand seçilmedi';
+            brandSelect.value = '';
+            percentageWrap.style.display = 'none';
+            tieredWrap.style.display = 'none';
+            resultDiv.style.display = 'none';
+            resultDiv.innerHTML = '';
+            financeSummary.style.display = 'none';
+            refreshBonusMemoryIndicator();
+            return;
+        }
         brandBadge.textContent = '| ' + currentBrand.label;
         brandSelect.value = currentBrand.id;
         if (currentBrand.mode === 'tiered') {
@@ -149,9 +200,11 @@
         resultDiv.style.display = 'none';
         resultDiv.innerHTML = '';
         financeSummary.style.display = 'none';
+        refreshBonusMemoryIndicator();
     }
 
     brandSelect.addEventListener('change', () => {
+        if (!brandSelect.value) return;
         currentBrand = getBrandById(brandSelect.value);
         saveBrandId(currentBrand.id);
         refreshBrandUI();
@@ -159,6 +212,7 @@
 
     btnSettingsCalc.addEventListener('click', () => {
         mainView.style.display = 'none';
+        infoView.style.display = 'none';
         settingsView.style.display = 'block';
     });
     btnBackSettings.addEventListener('click', () => {
@@ -166,8 +220,35 @@
         mainView.style.display = 'block';
     });
 
+    function showInfoView() {
+        mainView.style.display = 'none';
+        settingsView.style.display = 'none';
+        infoView.style.display = 'block';
+    }
+    function hasSeenInfoForCurrentVersion() {
+        try {
+            return localStorage.getItem(INFO_SEEN_VERSION_KEY) === SCRIPT_VERSION;
+        } catch (e) { return true; }
+    }
+    function markInfoSeenForCurrentVersion() {
+        try { localStorage.setItem(INFO_SEEN_VERSION_KEY, SCRIPT_VERSION); } catch (e) {}
+    }
+
+    btnInfoCalc.addEventListener('click', () => {
+        showInfoView();
+    });
+    btnBackInfo.addEventListener('click', () => {
+        infoView.style.display = 'none';
+        mainView.style.display = 'block';
+    });
+
     btnToggleCalc.addEventListener('click', () => {
-        bonusCalcPanel.style.display = bonusCalcPanel.style.display === 'none' ? 'block' : 'none';
+        let willOpen = bonusCalcPanel.style.display === 'none';
+        bonusCalcPanel.style.display = willOpen ? 'block' : 'none';
+        if (willOpen && !hasSeenInfoForCurrentVersion()) {
+            showInfoView();
+            markInfoSeenForCurrentVersion();
+        }
     });
     btnCloseCalc.addEventListener('click', () => {
         bonusCalcPanel.style.display = 'none';
@@ -231,6 +312,145 @@
     }
 
     // ============================================================
+    // BONUS HAFIZASI (ANLIK KAYIP BONUSU TAKİBİ)
+    // ============================================================
+    // "DD-MM-YYYY HH:mm:ss" formatındaki tarih metnini epoch ms'e çevirir.
+    function parseTableDateTime(str) {
+        if (!str) return null;
+        let m = String(str).trim().match(/(\d{2})-(\d{2})-(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
+        if (!m) return null;
+        let dd = Number(m[1]), mm = Number(m[2]), yyyy = Number(m[3]);
+        let hh = Number(m[4]), min = Number(m[5]), ss = Number(m[6]);
+        return new Date(yyyy, mm - 1, dd, hh, min, ss).getTime();
+    }
+
+    function getPlayerIdFromUrl() {
+        let m = window.location.href.match(/\/players\/(\d+)\//);
+        return m ? m[1] : null;
+    }
+
+    const BONUS_MEMORY_KEY = 'cashbackCalc_bonusMemory';
+    const BONUS_MEMORY_TTL_MS = 7 * 60 * 1000; // 7 dakika
+
+    function loadBonusMemoryStore() {
+        try {
+            return JSON.parse(localStorage.getItem(BONUS_MEMORY_KEY)) || {};
+        } catch (e) { return {}; }
+    }
+    function saveBonusMemoryStore(store) {
+        try { localStorage.setItem(BONUS_MEMORY_KEY, JSON.stringify(store)); } catch (e) {}
+    }
+    // 7 dakikayı geçen kayıtları temizler, geriye güncel store'u döner.
+    function cleanExpiredBonusMemory() {
+        let store = loadBonusMemoryStore();
+        let now = Date.now();
+        let changed = false;
+        Object.keys(store).forEach(pid => {
+            if (!store[pid] || (now - store[pid].capturedAt) > BONUS_MEMORY_TTL_MS) {
+                delete store[pid];
+                changed = true;
+            }
+        });
+        if (changed) saveBonusMemoryStore(store);
+        return store;
+    }
+    function getBonusMemoryForPlayer(playerId) {
+        if (!playerId) return null;
+        let store = cleanExpiredBonusMemory();
+        return store[playerId] || null;
+    }
+    function setBonusMemoryForPlayer(playerId, data) {
+        if (!playerId) return;
+        let store = cleanExpiredBonusMemory();
+        store[playerId] = Object.assign({}, data, { capturedAt: Date.now() });
+        saveBonusMemoryStore(store);
+    }
+
+    function isBonusHistoryPage() {
+        return window.location.href.includes('/detail/(popup:bonus-history)');
+    }
+
+    function findBonusHistoryTable() {
+        let tables = document.querySelectorAll('table');
+        for (let tbl of tables) {
+            if (tbl.textContent.includes('Trigger Date') && tbl.textContent.includes('Plan')) {
+                return tbl;
+            }
+        }
+        return null;
+    }
+
+    // Bonuses (bonus-history) popup'ı açıkken tabloyu tarar, aktif brand'in anlık kayıp
+    // bonusuna ait EN YENİ "Trigger Date"li satırı bulup player ID'ye göre hafızaya alır.
+    function scanBonusHistory() {
+        if (!isBonusHistoryPage()) return;
+        if (!currentBrand) return;
+        let playerId = getPlayerIdFromUrl();
+        if (!playerId) return;
+
+        let table = findBonusHistoryTable();
+        if (!table) return;
+
+        let thead = table.querySelector('thead tr');
+        let tbody = table.querySelector('tbody');
+        if (!thead || !tbody) return;
+
+        let headers = Array.from(thead.cells).map(th => th.textContent.trim().toLowerCase().replace(/\s+/g, ' '));
+        let planIdx = headers.findIndex(h => h.includes('plan'));
+        let triggerDateIdx = headers.findIndex(h => h.includes('trigger date'));
+        let amountIdx = headers.findIndex(h => h === 'amount');
+        if (amountIdx === -1) amountIdx = headers.findIndex(h => h.includes('amount'));
+
+        if (planIdx === -1 || triggerDateIdx === -1) return;
+
+        let keyword = currentBrand.bonusKeyword;
+        let bestTs = -Infinity;
+        let bestDateText = "";
+        let bestAmountText = "";
+
+        tbody.querySelectorAll('tr').forEach(row => {
+            let cells = row.cells;
+            if (!cells[planIdx] || !cells[triggerDateIdx]) return;
+            let planText = cells[planIdx].textContent.trim().toUpperCase();
+            if (!planText.includes(keyword)) return;
+            let ts = parseTableDateTime(cells[triggerDateIdx].textContent);
+            if (ts === null) return;
+            if (ts > bestTs) {
+                bestTs = ts;
+                bestDateText = cells[triggerDateIdx].textContent.trim();
+                bestAmountText = (amountIdx !== -1 && cells[amountIdx]) ? cells[amountIdx].textContent.trim() : "";
+            }
+        });
+
+        if (bestTs > -Infinity) {
+            setBonusMemoryForPlayer(playerId, {
+                triggerTs: bestTs,
+                triggerDateText: bestDateText,
+                amountText: bestAmountText,
+                brandId: currentBrand.id
+            });
+            refreshBonusMemoryIndicator();
+        }
+    }
+
+    // Panelde, geçerli oyuncu için hafızada tutulan anlık kayıp bonusu bilgisini küçük yazıyla gösterir.
+    function refreshBonusMemoryIndicator() {
+        if (!bonusMemoryIndicator) return;
+        let playerId = getPlayerIdFromUrl();
+        let mem = getBonusMemoryForPlayer(playerId);
+        if (!currentBrand || !mem || mem.brandId !== currentBrand.id) {
+            bonusMemoryIndicator.textContent = '';
+            return;
+        }
+        let dakika = Math.floor((Date.now() - mem.capturedAt) / 60000);
+        bonusMemoryIndicator.textContent = `Hafızadaki anlık kayıp bonusu: ${mem.triggerDateText}${mem.amountText ? ' - ' + mem.amountText : ''} (${dakika} dk önce tespit edildi)`;
+    }
+
+    setInterval(scanBonusHistory, 2000);
+    setInterval(cleanExpiredBonusMemory, 30000);
+    setInterval(refreshBonusMemoryIndicator, 5000);
+
+    // ============================================================
     // BRAND 41 HESAPLAMA MANTIĞI (B41 Edition 1.3 ile birebir aynı)
     // ============================================================
     function runCalculationB41(mode) {
@@ -255,6 +475,7 @@
             let relBonusIdx = headers.findIndex(h => h.includes('released bonus credit'));
             let productIdx = headers.findIndex(h => h.includes('product') && !h.includes('amount'));
             let tranIdIdx = headers.findIndex(h => h.includes('game tran id') || h.includes('game id'));
+            let dateTimeIdx = headers.findIndex(h => h.includes('date time'));
 
             if (typeIdx === -1) typeIdx = 2;
             if (debitIdx === -1) debitIdx = 4;
@@ -262,6 +483,7 @@
             if (relBonusIdx === -1) relBonusIdx = 8;
             if (productIdx === -1) productIdx = 13;
             if (tranIdIdx === -1) tranIdIdx = 15;
+            if (dateTimeIdx === -1) dateTimeIdx = 1;
 
             let cBahis = 0, cKazanc = 0;
             let sBahis = 0, sKazanc = 0, sCashOutFarki = 0;
@@ -277,6 +499,26 @@
             let rows = tbody.querySelectorAll('tr');
             let islenenSatirCount = 0;
 
+            // --- ANLIK KAYIP BONUSU KESİM NOKTASI (varsa) ---
+            // Hafızada bu oyuncu/brand için geçerli bir bonus kaydı varsa VE bu tabloda
+            // aynı zaman damgasına sahip bir CRE_BONUS satırı gerçekten bulunuyorsa,
+            // oyun/bonus hesabı SADECE bu satırdan sonrasını kapsayacak. Deposit/Withdrawal
+            // toplamları buna bakılmaksızın her zaman tüm görünen pencereyi kapsar.
+            let cutoffTs = null;
+            let bonusMemory = getBonusMemoryForPlayer(getPlayerIdFromUrl());
+            if (bonusMemory && bonusMemory.brandId === currentBrand.id) {
+                let matchFound = false;
+                rows.forEach(row => {
+                    let cells = row.cells;
+                    if (cells.length < 15) return;
+                    let type = cells[typeIdx].textContent.trim().toUpperCase();
+                    if (type !== 'CRE_BONUS') return;
+                    let ts = cells[dateTimeIdx] ? parseTableDateTime(cells[dateTimeIdx].textContent) : null;
+                    if (ts !== null && ts === bonusMemory.triggerTs) matchFound = true;
+                });
+                if (matchFound) cutoffTs = bonusMemory.triggerTs;
+            }
+
             // --- 1. AŞAMA (ÖN TARAMA) ---
             rows.forEach(row => {
                 let cells = row.cells;
@@ -288,6 +530,11 @@
                 let debit = cleanMoney(cells[debitIdx].textContent);
 
                 if (isExcludedProvider(product)) return;
+
+                if (cutoffTs !== null) {
+                    let rowTs = cells[dateTimeIdx] ? parseTableDateTime(cells[dateTimeIdx].textContent) : null;
+                    if (rowTs === null || rowTs <= cutoffTs) return;
+                }
 
                 if (type === 'GAME_BET' && tranId && tranId !== "") {
                     sporBahisHafizasi[tranId] = debit;
@@ -318,9 +565,15 @@
                 islenenSatirCount++;
                 let isSports = product.includes('BETBY') || product.includes('DIGITAIN');
 
+                // Deposit/Withdrawal (uygunluk kontrolü için) her zaman TÜM görünen pencereyi kapsar.
                 if (type === 'DEPOSIT') { tDeposit += amount; }
                 else if (type === 'WITHDRAWAL') { rawWithdrawal += amount; }
                 else if (type === 'WD_CANCEL' || type === 'WD_REJECT') { canceledWithdrawal += amount; }
+
+                // Oyun/bonus hesabı, varsa cutoff'tan SONRAKİ satırlarla sınırlı.
+                let rowTs = cells[dateTimeIdx] ? parseTableDateTime(cells[dateTimeIdx].textContent) : null;
+                let beforeCutoff = cutoffTs !== null && (rowTs === null || rowTs <= cutoffTs);
+                if (beforeCutoff) return;
 
                 if (type === 'BONUS_REL' || type === 'CRE_BONUS') {
                     totalBonusRel += relBonus;
@@ -356,6 +609,7 @@
             txtTotalDeposit.innerText = tDeposit.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' ₺';
             txtTotalWithdrawal.innerText = netWithdrawal.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' ₺';
             financeSummary.style.display = 'block';
+            refreshBonusMemoryIndicator();
 
             let missingWarningHTML = "";
             if (mode === 'sports' && missingCashOutIds.length > 0) {
@@ -467,6 +721,7 @@
             let relBonusDebitIdx = headers.findIndex(h => h.includes('released bonus debit'));
             let productIdx = headers.findIndex(h => h.includes('product') && !h.includes('amount'));
             let tranIdIdx = headers.findIndex(h => h.includes('game tran id') || h.includes('game id'));
+            let dateTimeIdx = headers.findIndex(h => h.includes('date time'));
 
             if (typeIdx === -1) typeIdx = 2;
             if (debitIdx === -1) debitIdx = 4;
@@ -475,6 +730,7 @@
             if (relBonusDebitIdx === -1) relBonusDebitIdx = 7;
             if (productIdx === -1) productIdx = 13;
             if (tranIdIdx === -1) tranIdIdx = 15;
+            if (dateTimeIdx === -1) dateTimeIdx = 1;
 
             let cBahis = 0, cKazanc = 0;
             let sBahis = 0, sKazanc = 0, sCashOutFarki = 0;
@@ -490,6 +746,22 @@
             let rows = tbody.querySelectorAll('tr');
             let islenenSatirCount = 0;
 
+            // --- ANLIK KAYIP BONUSU KESİM NOKTASI (varsa) ---
+            let cutoffTs = null;
+            let bonusMemory = getBonusMemoryForPlayer(getPlayerIdFromUrl());
+            if (bonusMemory && bonusMemory.brandId === currentBrand.id) {
+                let matchFound = false;
+                rows.forEach(row => {
+                    let cells = row.cells;
+                    if (cells.length < 15) return;
+                    let type = cells[typeIdx].textContent.trim().toUpperCase();
+                    if (type !== 'CRE_BONUS') return;
+                    let ts = cells[dateTimeIdx] ? parseTableDateTime(cells[dateTimeIdx].textContent) : null;
+                    if (ts !== null && ts === bonusMemory.triggerTs) matchFound = true;
+                });
+                if (matchFound) cutoffTs = bonusMemory.triggerTs;
+            }
+
             // --- 1. AŞAMA (ÖN TARAMA) ---
             rows.forEach(row => {
                 let cells = row.cells;
@@ -501,6 +773,11 @@
                 let debit = cleanMoney(cells[debitIdx].textContent);
 
                 if (isExcludedProvider(product)) return;
+
+                if (cutoffTs !== null) {
+                    let rowTs = cells[dateTimeIdx] ? parseTableDateTime(cells[dateTimeIdx].textContent) : null;
+                    if (rowTs === null || rowTs <= cutoffTs) return;
+                }
 
                 if (type === 'GAME_BET' && tranId && tranId !== "") {
                     sporBahisHafizasi[tranId] = debit;
@@ -534,9 +811,15 @@
                 islenenSatirCount++;
                 let isSports = product.includes('BETBY') || product.includes('DIGITAIN');
 
+                // Deposit/Withdrawal (uygunluk kontrolü için) her zaman TÜM görünen pencereyi kapsar.
                 if (type === 'DEPOSIT') { tDeposit += amount; }
                 else if (type === 'WITHDRAWAL') { rawWithdrawal += amount; }
                 else if (type === 'WD_CANCEL' || type === 'WD_REJECT') { canceledWithdrawal += amount; }
+
+                // Oyun/bonus hesabı, varsa cutoff'tan SONRAKİ satırlarla sınırlı.
+                let rowTs = cells[dateTimeIdx] ? parseTableDateTime(cells[dateTimeIdx].textContent) : null;
+                let beforeCutoff = cutoffTs !== null && (rowTs === null || rowTs <= cutoffTs);
+                if (beforeCutoff) return;
 
                 if (type === 'BONUS_REL' || type === 'CRE_BONUS') {
                     totalBonusRel += relBonusCredit;
@@ -572,6 +855,7 @@
             txtTotalDeposit.innerText = tDeposit.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' ₺';
             txtTotalWithdrawal.innerText = netWithdrawal.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) + ' ₺';
             financeSummary.style.display = 'block';
+            refreshBonusMemoryIndicator();
 
             let missingWarningHTML = "";
             if (mode === 'sports' && missingCashOutIds.length > 0) {
@@ -657,6 +941,11 @@
     // BRAND'E GÖRE YÖNLENDİRME
     // ============================================================
     function runCalculation(mode) {
+        if (!currentBrand) {
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<span style="color:red;">Önce ⚙ Ayarlar\'dan bir Brand seçmelisin!</span>';
+            return;
+        }
         if (currentBrand.mode === 'tiered') {
             runCalculationB41(mode);
         } else {
