@@ -29,7 +29,7 @@
     ];
     const STORAGE_KEY = 'cashbackCalc_selectedBrand';
     // @version ile senkron tutulmalı — her güncellemede birlikte artırılacak.
-    const SCRIPT_VERSION = '2.1';
+    const SCRIPT_VERSION = '2.3';
     const INFO_SEEN_VERSION_KEY = 'cashbackCalc_infoSeenVersion';
 
     function getBrandById(id) {
@@ -63,7 +63,7 @@
 
         <div id="bonusCalcPanel" style="position:fixed; bottom:80px; right:20px; width:340px; background:#1a1a24; color:#fff; font-family:Segoe UI, sans-serif; border-radius:12px; padding:15px; box-shadow:0 15px 35px rgba(0,0,0,0.9); z-index:999999; border: 1px solid #333; display:none;">
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #444; padding-bottom:10px; margin-bottom:12px;">
-                <h3 style="margin:0; font-size:15px; color:#00ff88;">🎰 Cashback Calc <span id="brandBadge" style="color:#ffaa00; font-size:13px; margin-left:4px;"></span> <span style="font-size:10px; color:#aaa; margin-left:4px;">v2.1</span></h3>
+                <h3 style="margin:0; font-size:15px; color:#00ff88;">🎰 Cashback Calc <span id="brandBadge" style="color:#ffaa00; font-size:13px; margin-left:4px;"></span> <span style="font-size:10px; color:#aaa; margin-left:4px;">v2.3</span></h3>
                 <div>
                     <button id="btnInfoCalc" style="background:none; border:none; color:#aaa; font-size:16px; cursor:pointer; padding:0; line-height:1; margin-right:8px;" title="Nasıl Kullanılır?">ℹ</button>
                     <button id="btnSettingsCalc" style="background:none; border:none; color:#aaa; font-size:16px; cursor:pointer; padding:0; line-height:1; margin-right:8px;" title="Ayarlar">⚙</button>
