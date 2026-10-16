@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cashback Calculator (All Brands)
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.6
 // @description  Casino ve Spor bahisleri için kayıp bonusu ve finans özeti hesaplayıcı. Brand 41 için kademeli sistem, diğer brandler için yüzdelik sistem.
 // @author       BAHO
 // @match        https://core-secundus.gmntc.com/*
@@ -29,7 +29,7 @@
     ];
     const STORAGE_KEY = 'cashbackCalc_selectedBrand';
     // @version ile senkron tutulmalı — her güncellemede birlikte artırılacak.
-    const SCRIPT_VERSION = '2.4';
+    const SCRIPT_VERSION = '2.6';
     const INFO_SEEN_VERSION_KEY = 'cashbackCalc_infoSeenVersion';
 
     function getBrandById(id) {
@@ -63,7 +63,7 @@
 
         <div id="bonusCalcPanel" style="position:fixed; bottom:80px; right:20px; width:340px; background:#1a1a24; color:#fff; font-family:Segoe UI, sans-serif; border-radius:12px; padding:15px; box-shadow:0 15px 35px rgba(0,0,0,0.9); z-index:999999; border: 1px solid #333; display:none;">
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #444; padding-bottom:10px; margin-bottom:12px;">
-                <h3 style="margin:0; font-size:15px; color:#00ff88;">🎰 Cashback Calc <span id="brandBadge" style="color:#ffaa00; font-size:13px; margin-left:4px;"></span> <span style="font-size:10px; color:#aaa; margin-left:4px;">v2.4</span></h3>
+                <h3 style="margin:0; font-size:15px; color:#00ff88;">🎰 Cashback Calc <span id="brandBadge" style="color:#ffaa00; font-size:13px; margin-left:4px;"></span> <span style="font-size:10px; color:#aaa; margin-left:4px;">v2.6</span></h3>
                 <div>
                     <button id="btnInfoCalc" style="background:none; border:none; color:#aaa; font-size:16px; cursor:pointer; padding:0; line-height:1; margin-right:8px;" title="Nasıl Kullanılır?">ℹ</button>
                     <button id="btnSettingsCalc" style="background:none; border:none; color:#aaa; font-size:16px; cursor:pointer; padding:0; line-height:1; margin-right:8px;" title="Ayarlar">⚙</button>
@@ -518,6 +518,7 @@
             let debitIdx = headers.findIndex(h => h.includes('real debit'));
             let creditIdx = headers.findIndex(h => h.includes('real credit'));
             let relBonusIdx = headers.findIndex(h => h.includes('released bonus credit'));
+            let relBonusDebitIdx = headers.findIndex(h => h.includes('released bonus debit'));
             let productIdx = headers.findIndex(h => h.includes('product') && !h.includes('amount'));
             let tranIdIdx = headers.findIndex(h => h.includes('game tran id') || h.includes('game id'));
             let dateTimeIdx = headers.findIndex(h => h.includes('date time'));
@@ -526,6 +527,7 @@
             if (debitIdx === -1) debitIdx = 4;
             if (creditIdx === -1) creditIdx = 5;
             if (relBonusIdx === -1) relBonusIdx = 8;
+            if (relBonusDebitIdx === -1) relBonusDebitIdx = 7;
             if (productIdx === -1) productIdx = 13;
             if (tranIdIdx === -1) tranIdIdx = 15;
             if (dateTimeIdx === -1) dateTimeIdx = 1;
@@ -608,7 +610,8 @@
                 let debit = cleanMoney(cells[debitIdx].textContent);
                 let credit = cleanMoney(cells[creditIdx].textContent);
                 let relBonus = cleanMoney(cells[relBonusIdx].textContent);
-                let amount = debit + credit;
+                let relBonusDebit = cells[relBonusDebitIdx] ? cleanMoney(cells[relBonusDebitIdx].textContent) : 0;
+                let amount = debit + credit + relBonus + relBonusDebit;
 
                 if (!type || type === "") return;
                 if (isExcludedProvider(product)) return;
