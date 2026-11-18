@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Cashback Calculator (All Brands)
 // @namespace    http://tampermonkey.net/
-// @version      2.6
+// @version      3.0
 // @description  Casino ve Spor bahisleri için kayıp bonusu ve finans özeti hesaplayıcı. Brand 41 için kademeli sistem, diğer brandler için yüzdelik sistem.
 // @author       BAHO
 // @match        https://core-secundus.gmntc.com/*
@@ -29,7 +29,7 @@
     ];
     const STORAGE_KEY = 'cashbackCalc_selectedBrand';
     // @version ile senkron tutulmalı — her güncellemede birlikte artırılacak.
-    const SCRIPT_VERSION = '2.6';
+    const SCRIPT_VERSION = '3.0';
     const INFO_SEEN_VERSION_KEY = 'cashbackCalc_infoSeenVersion';
 
     function getBrandById(id) {
@@ -63,7 +63,7 @@
 
         <div id="bonusCalcPanel" style="position:fixed; bottom:80px; right:20px; width:340px; background:#1a1a24; color:#fff; font-family:Segoe UI, sans-serif; border-radius:12px; padding:15px; box-shadow:0 15px 35px rgba(0,0,0,0.9); z-index:999999; border: 1px solid #333; display:none;">
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #444; padding-bottom:10px; margin-bottom:12px;">
-                <h3 style="margin:0; font-size:15px; color:#00ff88;">🎰 Cashback Calc <span id="brandBadge" style="color:#ffaa00; font-size:13px; margin-left:4px;"></span> <span style="font-size:10px; color:#aaa; margin-left:4px;">v2.6</span></h3>
+                <h3 style="margin:0; font-size:15px; color:#00ff88;">🎰 Cashback Calc <span id="brandBadge" style="color:#ffaa00; font-size:13px; margin-left:4px;"></span> <span style="font-size:10px; color:#aaa; margin-left:4px;">v3.0</span></h3>
                 <div>
                     <button id="btnInfoCalc" style="background:none; border:none; color:#aaa; font-size:16px; cursor:pointer; padding:0; line-height:1; margin-right:8px;" title="Nasıl Kullanılır?">ℹ</button>
                     <button id="btnSettingsCalc" style="background:none; border:none; color:#aaa; font-size:16px; cursor:pointer; padding:0; line-height:1; margin-right:8px;" title="Ayarlar">⚙</button>
@@ -290,33 +290,33 @@
         return product.includes('EVEN BET GAMING');
     }
 
+    // Brand 41: Kademeli Merdiven Tanımları
+    // Her kademe: { width: o kademenin kapsadığı kayıp tutarı (Infinity = kalan tüm tutar), rate: oran }
+    // Casino: 0 - 15.000 (%10) | 15.001 - 50.000 (%15) | 50.001 - 80.000 (%20) | 80.000 üstü (%25)
+    const B41_CASINO_TIERS = [
+        { width: 15000, rate: 0.10 },
+        { width: 35000, rate: 0.15 },
+        { width: 30000, rate: 0.20 },
+        { width: Infinity, rate: 0.25 },
+    ];
+    // Spor: 0 - 15.000 (%10) | 15.000 üstü (%15, limitsiz)
+    const B41_SPORTS_TIERS = [
+        { width: 15000, rate: 0.10 },
+        { width: Infinity, rate: 0.15 },
+    ];
+
     // Brand 41: Kademeli Merdiven Bonusu Hesaplama Fonksiyonu
-    function calculateTieredBonus(netLoss) {
+    // Kayıp, kademelere sırayla dağıtılır; her dilim kendi oranıyla hesaplanıp toplanır.
+    function calculateTieredBonus(netLoss, tiers) {
         if (netLoss <= 0) return 0;
         let bonus = 0;
         let remaining = netLoss;
-
-        // 1. Kademe: 0 - 10.000 (%10)
-        let tier1 = Math.min(remaining, 10000);
-        bonus += tier1 * 0.10;
-        remaining -= tier1;
-        if (remaining <= 0) return bonus;
-
-        // 2. Kademe: 10.001 - 30.000 (%15) -> Bu aralık 20.000 TL kapsar
-        let tier2 = Math.min(remaining, 20000);
-        bonus += tier2 * 0.15;
-        remaining -= tier2;
-        if (remaining <= 0) return bonus;
-
-        // 3. Kademe: 30.001 - 50.000 (%20) -> Bu aralık da 20.000 TL kapsar
-        let tier3 = Math.min(remaining, 20000);
-        bonus += tier3 * 0.20;
-        remaining -= tier3;
-        if (remaining <= 0) return bonus;
-
-        // 4. Kademe: 50.001 ve üstü (%25) -> Kalan tüm tutar
-        bonus += remaining * 0.25;
-
+        for (let tier of tiers) {
+            let slice = Math.min(remaining, tier.width);
+            bonus += slice * tier.rate;
+            remaining -= slice;
+            if (remaining <= 0) break;
+        }
         return bonus;
     }
 
@@ -496,7 +496,7 @@
     setInterval(refreshBonusMemoryIndicator, 5000);
 
     // ============================================================
-    // BRAND 41 HESAPLAMA MANTIĞI (B41 Edition 1.3 ile birebir aynı)
+    // BRAND 41 HESAPLAMA MANTIĞI (Casino ve Spor ayrı kademeli merdivenler — v3.0)
     // ============================================================
     function runCalculationB41(mode) {
         resultDiv.style.display = 'block';
@@ -698,7 +698,7 @@
 
             if (mode === 'casino') {
                 let casinoNet = cBahis - cKazanc - totalBonusRel;
-                let bonusTutari = calculateTieredBonus(casinoNet);
+                let bonusTutari = calculateTieredBonus(casinoNet, B41_CASINO_TIERS);
 
                 resultDiv.innerHTML = `
                     <div style="background:#222; padding:10px; border-radius:6px; margin-bottom:10px; border-left:4px solid #00e5ff;">
@@ -731,7 +731,7 @@
                 // NOT: Core paneldeki gerçek anlık CB sonuçlarıyla sağlama yapıldı — cashout edilen
                 // bahisler (hem stake'i hem cashout ile alınan tutar) hesaplamaya HİÇ dahil edilmiyor.
                 let sporNet = sBahis - sKazanc - totalBonusRel;
-                let bonusTutari = calculateTieredBonus(sporNet);
+                let bonusTutari = calculateTieredBonus(sporNet, B41_SPORTS_TIERS);
 
                 resultDiv.innerHTML = missingWarningHTML + `
                     <div style="background:#222; padding:10px; border-radius:6px; margin-bottom:10px; border-left:4px solid #ffaa00;">
